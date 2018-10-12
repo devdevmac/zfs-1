@@ -901,3 +901,73 @@ handle_is_solidstate_vnode(struct ldi_handle *lhp, int *isssd)
 
 	return (error);
 }
+
+int
+handle_unmap_vnode(struct ldi_handle *lhp,
+    dkioc_free_list_t *dkm)
+{
+	vfs_context_t context;
+	int error;
+
+#ifdef DEBUG
+	if (!lhp || !dkm) {
+		dprintf("%s missing lhp or dkm\n", __func__);
+		return (EINVAL);
+	}
+	if (lhp->lh_status != LDI_STATUS_ONLINE) {
+		dprintf("%s handle is not Online\n", __func__);
+		return (ENODEV);
+	}
+
+	/* Validate vnode */
+	if (LH_VNODE(lhp) == NULLVP) {
+		dprintf("%s missing vnode\n", __func__);
+		return (ENODEV);
+	}
+#endif
+
+	if (dkm->dfl_num_exts == 0) return (0);
+
+	/* Allocate and validate context */
+	context = vfs_context_create(spl_vfs_context_kernel());
+	if (!context) {
+		dprintf("%s couldn't create VFS context\n", __func__);
+		return (0);
+	}
+
+	/* Take an iocount on devvp vnode. */
+	error = vnode_getwithref(LH_VNODE(lhp));
+	if (error) {
+		dprintf("%s vnode_getwithref error %d\n",
+		    __func__, error);
+		vfs_context_rele(context);
+		return (ENODEV);
+	}
+	/* All code paths from here must vnode_put. */
+
+	/* We need to convert illumos' dkioc_free_list_t to dk_unmap_t */
+	dk_unmap_t dkun;
+	dkun.extents = kmem_alloc(sizeof(dk_extent_t) * dkm->dfl_num_exts, KM_SLEEP);
+	dkun.extentsCount = dkm->dfl_num_exts;
+	for (int i = 0; i < dkm->dfl_num_exts; i++) {
+		dkun.extents[i].offset = dkm->dfl_exts[i].dfle_start;
+		dkun.extents[i].length = dkm->dfl_exts[i].dfle_length;
+	}
+	/* dkm->dfl_flags vs dkun.options
+	 * #define DF_WAIT_SYNC 0x00000001 / * Wait for full write-out of free. * /
+	 * #define _DK_UNMAP_INITIALIZE    0x00000100
+	 */
+
+	/* Get the blocksize and block count */
+	error = VNOP_IOCTL(LH_VNODE(lhp), DKIOCUNMAP,
+	    (caddr_t)&dkun, 0, context);
+
+	/* Release iocount on vnode (still has usecount) */
+	vnode_put(LH_VNODE(lhp));
+	/* Drop vfs_context */
+	vfs_context_rele(context);
+
+	kmem_free(dkun.extents, sizeof(dk_extent_t) * dkm->dfl_num_exts);
+
+	return (error);
+}

@@ -21,6 +21,7 @@
 /*
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2016 Actifio, Inc. All rights reserved.
+ * Copyright 2017 Nexenta Systems, Inc. All rights reserved.
  */
 
 #include <assert.h>
@@ -41,6 +42,7 @@
 #include <sys/time.h>
 #include <sys/systeminfo.h>
 #include <sys/proc.h>
+#include <sys/fcntl.h>
 #include <sys/kernel_types.h>
 #ifdef __APPLE__
 #include <sys/disk.h>
@@ -365,6 +367,14 @@ int
 mutex_held(kmutex_t *mp)
 {
 	return (mp->m_owner == curthread);
+}
+
+/* ARGSUSED */
+int
+ddi_copyin(const void *buf, void *driverbuf, size_t cn, int flags)
+{
+	bcopy(buf, driverbuf, cn);
+	return (0);
 }
 
 /*
@@ -872,6 +882,30 @@ fop_getattr(vnode_t *vp, vattr_t *vap)
 	}
 
 	vap->va_size = st.st_size;
+	return (0);
+}
+
+int
+fop_space(
+	vnode_t *vp,
+	int cmd,
+	struct flock *fl,
+	int flag,
+	offset_t offset,
+	cred_t *cr,
+	void *ct)
+{
+#ifdef F_PUNCHHOLE
+	if (cmd == F_FREESP) {
+		fpunchhole_t fpht;
+		fpht.fp_flags = 0;
+		fpht.fp_offset = fl->l_start;
+		fpht.fp_length = fl->l_len;
+
+		if (fcntl(vp->v_fd, F_PUNCHHOLE, &fpht) == -1)
+			return (errno);
+	}
+#endif
 	return (0);
 }
 

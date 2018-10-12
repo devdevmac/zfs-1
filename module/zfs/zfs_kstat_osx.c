@@ -167,6 +167,10 @@ osx_kstat_t osx_kstat = {
 
 	{"zfs_lua_max_instrlimit",KSTAT_DATA_UINT64  },
 	{"zfs_lua_max_memlimit",KSTAT_DATA_UINT64  },
+
+	{"zfs_trim",KSTAT_DATA_UINT64  },
+	{"zfs_trim_min_ext_sz",KSTAT_DATA_UINT64  },
+
 };
 
 
@@ -350,7 +354,11 @@ static int osx_kstat_update(kstat_t *ksp, int rw)
 		    ks->zfs_lua_max_instrlimit.value.ui64;
 		zfs_lua_max_memlimit =
 		    ks->zfs_lua_max_memlimit.value.ui64;
-} else {
+
+		zfs_trim = ks->zfs_trim.value.ui64;
+		zfs_trim_min_ext_sz = ks->zfs_trim_min_ext_sz.value.ui64;
+
+	} else {
 
 		/* kstat READ */
 		ks->spa_version.value.ui64                   = SPA_VERSION;
@@ -516,6 +524,10 @@ static int osx_kstat_update(kstat_t *ksp, int rw)
 
 		ks->zfs_lua_max_instrlimit.value.ui64 = zfs_lua_max_instrlimit;
 		ks->zfs_lua_max_memlimit.value.ui64 = zfs_lua_max_memlimit;
+
+		ks->zfs_trim.value.ui64 = zfs_trim;
+		ks->zfs_trim_min_ext_sz.value.ui64 = zfs_trim_min_ext_sz;
+
 	}
 
 	return 0;

@@ -21,7 +21,7 @@
 /*
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2011, 2018 by Delphix. All rights reserved.
- * Copyright 2011 Nexenta Systems, Inc.  All rights reserved.
+ * Copyright 2017 Nexenta Systems, Inc.  All rights reserved.
  * Copyright (c) 2014 Spectra Logic Corporation, All rights reserved.
  * Copyright 2013 Saso Kiselkov. All rights reserved.
  * Copyright (c) 2016 Actifio, Inc. All rights reserved.
@@ -197,6 +197,8 @@ typedef enum spa_config_source {
 	SPA_CONFIG_SRC_MOS		/* MOS, but not always from right txg */
 } spa_config_source_t;
 
+typedef struct spa_trimstats spa_trimstats_t;
+
 struct spa {
 	/*
 	 * Fields protected by spa_namespace_lock.
@@ -371,11 +373,35 @@ struct spa {
 	uint64_t	spa_errata;		/* errata issues detected */
 	spa_stats_t	spa_stats;		/* assorted spa statistics */
 	spa_keystore_t	spa_keystore;		/* loaded crypto keys */
+	/* TRIM/UNMAP kstats */
+	spa_trimstats_t	*spa_trimstats;		/* alloc'd by kstat_create */
+	kstat_t	*spa_trimstats_ks;
+
 	hrtime_t	spa_ccw_fail_time;	/* Conf cache write fail time */
 	taskq_t		*spa_zvol_taskq;	/* Taskq for minor managment */
 #ifdef __APPLE__
 	spa_iokit_t	*spa_iokit_proxy;	/* IOKit pool proxy */
 #endif
+
+	/* TRIM */
+	uint64_t	spa_force_trim;		/* force sending trim? */
+	uint64_t	spa_auto_trim;		/* see spa_auto_trim_t */
+
+	kmutex_t	spa_auto_trim_lock;
+	kcondvar_t	spa_auto_trim_done_cv;	/* all autotrim thrd's exited */
+	uint64_t	spa_num_auto_trimming;	/* # of autotrim threads */
+	taskq_t		*spa_auto_trim_taskq;
+
+	kmutex_t	spa_man_trim_lock;
+	uint64_t	spa_man_trim_rate;	/* rate of trim in bytes/sec */
+	uint64_t	spa_num_man_trimming;	/* # of manual trim threads */
+	boolean_t	spa_man_trim_stop;	/* requested manual trim stop */
+	kcondvar_t	spa_man_trim_update_cv;	/* updates to TRIM settings */
+	kcondvar_t	spa_man_trim_done_cv;	/* manual trim has completed */
+	/* For details on trim start/stop times see spa_get_trim_prog. */
+	uint64_t	spa_man_trim_start_time;
+	uint64_t	spa_man_trim_stop_time;
+	taskq_t		*spa_man_trim_taskq;
 
 	/*
 	 * spa_refcount & spa_config_lock must be the last elements
@@ -396,6 +422,11 @@ extern void spa_taskq_dispatch_sync(spa_t *, zio_type_t t, zio_taskq_type_t q,
 
 extern void spa_load_spares(spa_t *spa);
 extern void spa_load_l2cache(spa_t *spa);
+
+extern void spa_auto_trim_taskq_create(spa_t *spa);
+extern void spa_man_trim_taskq_create(spa_t *spa);
+extern void spa_auto_trim_taskq_destroy(spa_t *spa);
+extern void spa_man_trim_taskq_destroy(spa_t *spa);
 
 #ifdef	__cplusplus
 }

@@ -24,8 +24,7 @@
  * Portions Copyright 2011 Martin Matuska
  * Copyright 2015, OmniTI Computer Consulting, Inc. All rights reserved.
  * Portions Copyright 2012 Pawel Jakub Dawidek <pawel@dawidek.net>
- * Copyright (c) 2012, Joyent, Inc. All rights reserved.
- * Copyright 2015 Nexenta Systems, Inc.  All rights reserved.
+ * Copyright 2017 Nexenta Systems, Inc.  All rights reserved.
  * Copyright (c) 2014, Joyent, Inc. All rights reserved.
  * Copyright (c) 2011, 2016 by Delphix. All rights reserved.
  * Copyright (c) 2013 by Saso Kiselkov. All rights reserved.
@@ -36,7 +35,6 @@
  * Copyright (c) 2014 Integros [integros.com]
  * Copyright 2016 Toomas Soome <tsoome@me.com>
  * Copyright 2017 RackTop Systems.
- * Copyright (c) 2017 Datto Inc.
  */
 
 #define __APPLE_API_PRIVATE
@@ -1654,6 +1652,36 @@ zfs_ioc_pool_scan(zfs_cmd_t *zc)
 		error = spa_scan_stop(spa);
 	else
 		error = spa_scan(spa, zc->zc_cookie);
+
+	spa_close(spa, FTAG);
+
+	return (error);
+}
+
+/*
+ * inputs:
+ * zc_name              name of the pool
+ * zc_cookie            trim_cmd_info_t
+ */
+static int
+zfs_ioc_pool_trim(zfs_cmd_t *zc)
+{
+	spa_t *spa;
+	int error;
+	trim_cmd_info_t	tci;
+
+	if (ddi_copyin((void *)(uintptr_t)zc->zc_cookie, &tci,
+	    sizeof (tci), 0) == -1)
+		return (EFAULT);
+
+	if ((error = spa_open(zc->zc_name, &spa, FTAG)) != 0)
+		return (error);
+
+	if (tci.tci_start) {
+		spa_man_trim(spa, tci.tci_rate);
+	} else {
+		spa_man_trim_stop(spa);
+	}
 
 	spa_close(spa, FTAG);
 
@@ -6054,6 +6082,8 @@ zfs_ioctl_init(void)
 							zfs_secpolicy_config, B_TRUE, POOL_CHECK_NONE);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_SCAN,
 								   zfs_ioc_pool_scan);
+	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_TRIM,
+								   zfs_ioc_pool_trim);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_UPGRADE,
 								   zfs_ioc_pool_upgrade);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_VDEV_ADD,

@@ -21,6 +21,7 @@
 /*
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2011, 2018 by Delphix. All rights reserved.
+ * Copyright 2017 Nexenta Systems, Inc. All rights reserved.
  */
 
 #ifndef _SYS_VDEV_IMPL_H
@@ -79,6 +80,8 @@ typedef void	vdev_state_change_func_t(vdev_t *vd, int, int);
 typedef boolean_t vdev_need_resilver_func_t(vdev_t *vd, uint64_t, size_t);
 typedef void	vdev_hold_func_t(vdev_t *vd);
 typedef void	vdev_rele_func_t(vdev_t *vd);
+typedef void	vdev_trim_func_t(vdev_t *vd, zio_t *pio,
+    dkioc_free_list_t *trim_exts, boolean_t auto_trim);
 
 typedef void	vdev_remap_cb_t(uint64_t inner_offset, vdev_t *vd,
     uint64_t offset, uint64_t size, void *arg);
@@ -107,6 +110,7 @@ typedef const struct vdev_ops {
 	 * Used when initializing vdevs. Isn't used by leaf ops.
 	 */
 	vdev_xlation_func_t		*vdev_op_xlate;
+	vdev_trim_func_t		*vdev_op_trim;
 	char				vdev_op_type[16];
 	boolean_t			vdev_op_leaf;
 } vdev_ops_t;
@@ -317,6 +321,20 @@ struct vdev {
 	uint64_t	vdev_async_write_queue_depth;
 	uint64_t	vdev_max_async_write_queue_depth;
 
+	boolean_t	vdev_man_trimming; /* manual trim is ongoing	*/
+	uint64_t	vdev_trim_prog;	/* trim progress in bytes	*/
+	/*
+	 * Because trim zios happen outside of the DMU transactional engine,
+	 * we cannot rely on the DMU quiescing async trim zios to the vdev
+	 * before doing pool reconfiguration tasks. Therefore we count them
+	 * separately and quiesce them using vdev_trim_stop_wait before
+	 * removing or changing vdevs.
+	 */
+	kmutex_t	vdev_trim_zios_lock;
+	kcondvar_t	vdev_trim_zios_cv;
+	uint64_t	vdev_trim_zios;	/* # of in-flight async trim zios */
+	boolean_t	vdev_trim_zios_stop;	/* see zio_trim_should_bypass */
+
 	/*
 	 * Protects the vdev_scan_io_queue field itself as well as the
 	 * structure's contents (when present).
@@ -346,6 +364,7 @@ struct vdev {
 	uint64_t	vdev_not_present; /* not present during import	*/
 	uint64_t	vdev_unspare;	/* unspare when resilvering done */
 	boolean_t	vdev_nowritecache; /* true if flushwritecache failed */
+	boolean_t	vdev_notrim;	/* true if Unmap/TRIM is unsupported */
 	boolean_t	vdev_checkremove; /* temporary online test	*/
 	boolean_t	vdev_forcefault; /* force online fault		*/
 	boolean_t	vdev_splitting;	/* split or repair in progress  */
@@ -463,6 +482,7 @@ extern int vdev_dtl_load(vdev_t *vd);
 extern void vdev_sync(vdev_t *vd, uint64_t txg);
 extern void vdev_sync_done(vdev_t *vd, uint64_t txg);
 extern void vdev_dirty(vdev_t *vd, int flags, void *arg, uint64_t txg);
+extern boolean_t vdev_is_dirty(vdev_t *vd, int flags, void *arg);
 extern void vdev_dirty_leaves(vdev_t *vd, int flags, uint64_t txg);
 
 /*

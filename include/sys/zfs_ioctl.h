@@ -589,9 +589,10 @@ typedef enum zfs_ioc {
     ZFS_IOC_POOL_CHECKPOINT,
     ZFS_IOC_POOL_DISCARD_CHECKPOINT,
 	ZFS_IOC_POOL_INITIALIZE,
+	ZFS_IOC_POOL_TRIM,
 
 	ZFS_IOC_CHANNEL_PROGRAM,
-	/*
+/*
 	 * Linux - 3/64 numbers reserved.
 	 */
 #ifdef __APPLE__

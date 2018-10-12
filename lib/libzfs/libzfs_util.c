@@ -24,6 +24,7 @@
  * Copyright (c) 2018 Joyent, Inc.
  * Copyright (c) 2011, 2017 by Delphix. All rights reserved.
  * Copyright 2016 Igor Kozhukhov <ikozhukhov@gmail.com>
+ * Copyright 2017 Nexenta Systems, Inc. All rights reserved.
  * Copyright (c) 2017 Datto Inc.
  */
 
